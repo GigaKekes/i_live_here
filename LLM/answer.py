@@ -31,15 +31,17 @@ message = """
 {question}
 
 Учитывая все важные аспекты, сгенерируй ответ пользователю, основываясь на следующем контексте:
-{context}
-
-Ответ должен быть вежливым, подробным и профессиональным, с ясными рекомендациями или информацией.
 (ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ НОМЕРА ИЗ КОНТЕКСТА И ПРОЧУЮ ДРУГУЮ ИНФОРМАЦИЮ ИЗ КОНТЕКСТА ЕСЛИ ЕСТЬ)
+КОНТЕКСТ:
+{context}
+КОНЕЦ КОНТЕКСТА
+
 Пример структуры ответа:
 Здравствуйте!
 (тут подробно ответ на вопрос, избегая упоминания источников данных)
 
 Ты — AI помощник, будь внимателен и обеспечь полезный и качественный ответ.
+Ответ должен быть вежливым, подробным и профессиональным, с ясными рекомендациями или информацией.
 """
 
 prompt = ChatPromptTemplate.from_messages([("human", message)])
@@ -98,7 +100,7 @@ class typeDefiner():
         client = chromadb.Client()
         collection_themes = client.get_or_create_collection(name="collection_themes")
         
-        embeddings = HuggingFaceEmbeddings(model_name="multilingual-e5-large")
+        embeddings = HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large")
         self.vector_store_themes = Chroma(embedding_function=embeddings)
         self.vector_store_themes.add_documents([Document('Поиск контактов, основанный на Базе Контактов Санкт-Петербурга'), 
                                         Document('Образование, Детские сады и Школы'), 
