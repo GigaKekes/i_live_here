@@ -1,6 +1,6 @@
 import sys
 import os
-# Добавить корневую папку проекта в путь
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import logging
@@ -17,20 +17,20 @@ from langchain.vectorstores import Chroma
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.docstore.document import Document
 
-# Настройка логирования
+
 logging.basicConfig(level=logging.INFO)
 
-# Создание экземпляра модели GigaChat
+
 model = GigaChat(
     credentials=GigaChat_API,
     scope="GIGACHAT_API_PERS",
-    model="GigaChat", # GigaChat (GigaChat Lite), GigaChat-Pro, GigaChat-Max
+    model="GigaChat", 
     temperature=0.7,
     max_tokens=1000,
     verify_ssl_certs=False
 )
 
-# Шаблон промпта
+
 message = """
 Вопрос пользователя:
 {question}
@@ -51,14 +51,14 @@ message = """
 
 prompt = ChatPromptTemplate.from_messages([("human", message)])
 
-# Функция получения JSON-контекста для конкретного вопроса
+
 
 def get_building_id(address): 
     """Получить ID здания по адресу""" 
     url = "https://geo.hack-it.yazzh.ru/api/v2/geo/buildings/search/" 
     response = requests.get(url, params={"query": address}).json() 
     if response.get("success") and response["data"]: 
-        return response["data"][0]["id"]  # Берем ID первого здания из ответа 
+        return response["data"][0]["id"]  
     return None 
  
 def get_building_details(building_id): 
@@ -66,7 +66,7 @@ def get_building_details(building_id):
     url = f"https://geo.hack-it.yazzh.ru/api/v2/geo/buildings/{building_id}" 
     response = requests.get(url).json() 
     if response.get("data"): 
-        return response["data"]  # Возвращаем все данные о здании 
+        return response["data"]  
     return None 
  
 def get_vehicles_around(latitude, longitude): 
@@ -75,7 +75,7 @@ def get_vehicles_around(latitude, longitude):
     response = requests.get(url, params={"latitude": latitude, "longitude": longitude}).json() 
  
     if response.get("success") and response.get("data"): 
-        return response["data"]  # Список транспорта 
+        return response["data"]  
     return [] 
  
 def get_dispatcher_phones(building_id, dist): 
@@ -95,13 +95,13 @@ def get_dispatcher_phones(building_id, dist):
 def get_json(input_class: str, user_address) -> str: 
     try: 
         if input_class == 'Благоустройство, ЖКХ и уборка дорог': 
-            # Первый запрос 
+            
             building_id = get_building_id(user_address) 
             if not building_id: 
                 print("Не удалось найти здание по адресу.") 
                 return 
  
-            # Получение телефонов аварийно-диспетчерских служб 
+            
             dispatcher_phones = get_dispatcher_phones(building_id, user_address) 
             details = get_building_details(building_id) 
             latitude = details['latitude'] 
@@ -112,7 +112,7 @@ def get_json(input_class: str, user_address) -> str:
             return combined_json_str 
  
         elif input_class == 'Поиск контактов, основанный на Базе Контактов Санкт-Петербурга': 
-            # Первый запрос 
+            
             response = requests.get("https://hack-it.yazzh.ru/districts-info/building-id/58490", params={"query": "Замшина улица, дом 70, литера А"}).json()[0] 
  
             contacts = [] 
@@ -129,7 +129,7 @@ def get_json(input_class: str, user_address) -> str:
  
             item_to_message = contacts.copy() 
  
-            # Создаем словарь с ключом "message" 
+            
             data = { 
                 "message": message, 
                 "contacts": item_to_message 
@@ -146,7 +146,7 @@ def get_json(input_class: str, user_address) -> str:
                 f"https://yazzh.gate.petersburg.ru/api/v2/recycling/map/?category=Все&location_latitude={latitude}&location_longitude={longtitude}&location_radius=3" 
             ).json() 
             data = [] 
-            count = 0 # мы оставляем только первые 5 объектов из за ошибки в api на вашей стороне :(
+            count = 0 # мы оставляем только первые 5 объектов из-за проблем со стороны вашей api
             for item in recycling_response['data']:
                 if count == 5:
                     break 
@@ -159,7 +159,7 @@ def get_json(input_class: str, user_address) -> str:
         else: 
             return "[]"
 
-        # Преобразуем в JSON-строку 
+        
         return json.dumps(data, ensure_ascii=False) 
     except Exception as e: 
         logging.error(f"Ошибка при получении JSON: {e}") 
@@ -187,11 +187,11 @@ def find_address_by_user_id(user_id: int) -> str:
     try:
         with open(ADDRESSES_FILE, mode="r", encoding="utf-8") as file:
             reader = csv.reader(file)
-            # Пропускаем заголовок
+            
             next(reader)
             for row in reader:
                 if int(row[0]) == user_id:
-                    return row[2]  # Адрес находится в третьей колонке
+                    return row[2]  
         return "Адрес не найден."
     except FileNotFoundError:
         return "CSV-файл не найден."
@@ -199,16 +199,16 @@ def find_address_by_user_id(user_id: int) -> str:
         return f"Произошла ошибка: {e}"
 
 
-# Функция генерации ответа
+
 def generate_response(question: str, user_context: str, user_id) -> str:
     try:
-        # Получение JSON-контекста для текущего вопроса
+        
         definer = typeDefiner()
         class_question = definer.define_type(question)
         user_address = find_address_by_user_id(user_id)
         json_context = get_json(class_question, user_address=user_address)
         
-        # Формирование запроса
+        
         rag_chain = {"context": RunnablePassthrough(), "question": RunnablePassthrough()} | prompt | model
         response = rag_chain.invoke({
             "вопрос пользователя:": question,
@@ -216,7 +216,7 @@ def generate_response(question: str, user_context: str, user_id) -> str:
             "текущий контекст": user_context
         })
         
-        # Возврат текста ответа
+        
         return response.content
     except Exception as e:
         logging.error(f"Ошибка при обращении к GigaChat: {e}")
