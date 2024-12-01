@@ -107,7 +107,7 @@ async def get_custom_llm_response(prompt: str, user_id: int) -> str:
         enriched_prompt = f"Контекст: {context}\nВопрос: {prompt}"
 
         # Передаём context в generate_response
-        response = generate_response(question=enriched_prompt, user_context=context)
+        response = generate_response(question=enriched_prompt, user_context=context, user_id=user_id)
         return response
     except Exception as e:
         logging.error(f"Ошибка при запросе к LLM: {e}")
@@ -158,7 +158,7 @@ async def set_address(message: Message):
             # Если адрес уже есть, показываем текущий адрес и кнопку "Редактировать"
             await message.answer(
                 f"📍 Ваш текущий адрес: *{current_address}*\n\n"
-                "Если хотите изменить адрес, нажмите кнопку 'Редактировать'.",
+                "Если хотите изменить адрес, нажмите кнопку 'Редактировать'.\n Формат: г.Санкт-Петербург, Невский проспект, дом 60",
                 parse_mode="Markdown",
                 reply_markup=edit_address_keyboard()
             )
