@@ -24,27 +24,21 @@ the and in is on it at an of for or to not he she we they was were be you your m
 this that those these here there when where how why whom by with if then else because too also just only 
 about from into over under but yet nor so very can could should would shall """.split())
 
-
 user_contexts = {}
-
 
 MAX_CONTEXT_SIZE = 10
 
-
 logging.basicConfig(level=logging.INFO)
-
 
 bot = Bot(token=BOT_API)
 dp = Dispatcher()
 router = Router()
 dp.include_router(router)
 
-
 if not os.path.exists(RATINGS_FILE):
     with open(RATINGS_FILE, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(["user_id", "username", "rating"])
-
 
 keyboard = ReplyKeyboardMarkup(
     keyboard=[
@@ -54,7 +48,6 @@ keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-
 keyboard_with_question = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Задать вопрос")],  
@@ -63,21 +56,16 @@ keyboard_with_question = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-
 def rating_keyboard():
     builder = InlineKeyboardBuilder()
     for i in range(1, 6):
         builder.add(InlineKeyboardButton(text=f"⭐️ {i}", callback_data=f"rate:{i}"))
     return builder.as_markup()
 
-
 def extract_keywords(text: str) -> list:
-    
     words = text.lower().translate(str.maketrans("", "", punctuation)).split()
-    
     keywords = [word for word in words if word not in STOP_WORDS]
     return keywords
-
 
 def update_user_context(user_id: int, keywords: list):
     if user_id not in user_contexts:
@@ -85,26 +73,18 @@ def update_user_context(user_id: int, keywords: list):
 
     user_contexts[user_id].extend(keywords)
 
-    
     keyword_counts = Counter(user_contexts[user_id])
     user_contexts[user_id] = [
         word for word, _ in keyword_counts.most_common(MAX_CONTEXT_SIZE)
     ]
-
 
 async def get_custom_llm_response(prompt: str, user_id: int) -> str:
     try:
         
         keywords = extract_keywords(prompt)
         update_user_context(user_id, keywords)
-
-        
-        context = " ".join(user_contexts[user_id])
-
-        
+        context = " ".join(user_contexts[user_id])        
         enriched_prompt = f"Контекст: {context}\nВопрос: {prompt}"
-
-        
         response = generate_response(question=enriched_prompt, user_context=context, user_id=user_id)
         return response
     except Exception as e:
@@ -124,13 +104,10 @@ async def send_welcome(message: Message):
         reply_markup=keyboard
     )
 
-
 user_states = {}
-
 
 def edit_address_keyboard():
     return InlineKeyboardBuilder().add(InlineKeyboardButton(text="Редактировать", callback_data="edit_address")).as_markup()
-
 
 def get_user_address(user_id: int) -> str:
     try:
@@ -144,7 +121,6 @@ def get_user_address(user_id: int) -> str:
     except Exception as e:
         logging.error(f"Ошибка при чтении файла адресов: {e}")
     return None
-
 
 @router.message(Command("setaddress"))
 async def set_address(message: Message):
@@ -181,10 +157,6 @@ async def set_address(message: Message):
     except Exception as e:
         logging.error(f"Ошибка при сохранении адреса: {e}")
         await message.answer("⚠️ Извините, произошла ошибка при сохранении адреса.")
-
-import csv
-import os
-import logging
 
 async def update_user_address(user_id: int, new_address: str):
     try:
@@ -354,7 +326,6 @@ async def change_rate(callback_query: CallbackQuery):
                 if str(row[0]) == str(user_id):
                     row[2] = str(new_rating)  
                 updated_ratings.append(row)
-
         
         with open(RATINGS_FILE, mode="w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
@@ -393,7 +364,6 @@ async def ask_question(message: Message):
         reply_markup=keyboard_with_question
     )
 
-
 @router.message(lambda message: message.text == "Задать вопрос")
 async def ask_user_question(message: Message):
     await message.answer(
@@ -405,7 +375,6 @@ async def ask_user_question(message: Message):
             resize_keyboard=True
         )
     )
-
 
 @router.message(lambda message: message.text != "Отменить")
 async def handle_user_question(message: Message):

@@ -1,6 +1,5 @@
 import sys
 import os
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import logging
@@ -17,19 +16,16 @@ from langchain.vectorstores import Chroma
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.docstore.document import Document
 
-
 logging.basicConfig(level=logging.INFO)
-
 
 model = GigaChat(
     credentials=GigaChat_API,
     scope="GIGACHAT_API_PERS",
-    model="GigaChat", 
+    model="GigaChat-Max", 
     temperature=0.7,
     max_tokens=1000,
     verify_ssl_certs=False
 )
-
 
 message = """
 Вопрос пользователя:
@@ -50,8 +46,6 @@ message = """
 """
 
 prompt = ChatPromptTemplate.from_messages([("human", message)])
-
-
 
 def get_building_id(address): 
     """Получить ID здания по адресу""" 
@@ -91,7 +85,6 @@ def get_dispatcher_phones(building_id, dist):
         ans.append(item) 
     return ans 
  
- 
 def get_json(input_class: str, user_address) -> str: 
     try: 
         if input_class == 'Благоустройство, ЖКХ и уборка дорог': 
@@ -101,7 +94,6 @@ def get_json(input_class: str, user_address) -> str:
                 print("Не удалось найти здание по адресу.") 
                 return 
  
-            
             dispatcher_phones = get_dispatcher_phones(building_id, user_address) 
             details = get_building_details(building_id) 
             latitude = details['latitude'] 
@@ -128,7 +120,6 @@ def get_json(input_class: str, user_address) -> str:
                 message += f"Телефоны: {', '.join(contact['phones'])} \n" 
  
             item_to_message = contacts.copy() 
- 
             
             data = { 
                 "message": message, 
@@ -155,11 +146,9 @@ def get_json(input_class: str, user_address) -> str:
                     'location': item['location'] 
                 })
                 count += 1
-
         else: 
             return "[]"
 
-        
         return json.dumps(data, ensure_ascii=False) 
     except Exception as e: 
         logging.error(f"Ошибка при получении JSON: {e}") 
@@ -198,8 +187,6 @@ def find_address_by_user_id(user_id: int) -> str:
     except Exception as e:
         return f"Произошла ошибка: {e}"
 
-
-
 def generate_response(question: str, user_context: str, user_id) -> str:
     try:
         
@@ -215,7 +202,6 @@ def generate_response(question: str, user_context: str, user_id) -> str:
             "json файл, по которому ты должен составить ответ пользователю:": json_context,
             "текущий контекст": user_context
         })
-        
         
         return response.content
     except Exception as e:
