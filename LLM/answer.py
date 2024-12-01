@@ -11,6 +11,10 @@ from langchain_core.runnables import RunnablePassthrough
 from config import GigaChat_API
 import requests 
 from pprint3x import pprint
+import chromadb
+from langchain.vectorstores import Chroma
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.docstore.document import Document
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -19,9 +23,9 @@ logging.basicConfig(level=logging.INFO)
 model = GigaChat(
     credentials=GigaChat_API,
     scope="GIGACHAT_API_PERS",
-    model="GigaChat-Pro",
-    temperature=0.7,          # Контроль "творчества" ответа
-    max_tokens=1000,           # Максимальная длина ответа
+    model="GigaChat", # GigaChat (GigaChat Lite), GigaChat-Pro, GigaChat-Max
+    temperature=0.7,
+    max_tokens=1000,
     verify_ssl_certs=False
 )
 
@@ -45,9 +49,6 @@ message = """
 """
 
 prompt = ChatPromptTemplate.from_messages([("human", message)])
-
-# Контейнер для хранения контекста
-context_store = {}
 
 # Функция получения JSON-контекста для конкретного вопроса
 def get_json(input_class: str) -> str: 
@@ -89,12 +90,6 @@ def get_json(input_class: str) -> str:
         logging.error(f"Ошибка при получении JSON: {e}") 
         return "[]"
 
-import chromadb
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.docstore.document import Document
-
-
 class typeDefiner():
     def __init__(self):
         client = chromadb.Client()
@@ -113,30 +108,20 @@ class typeDefiner():
         
         return self.retriever_2.invoke(query)[0].page_content
 
-
 # Функция генерации ответа
-def generate_response(question: str, user_id: str) -> str:
+def generate_response(question: str, user_context: str) -> str:
     try:
-        # Получение контекста для пользователя из хранилища
-        context = context_store.get(user_id, "")
-        
         # Получение JSON-контекста для текущего вопроса
         definer = typeDefiner()
         class_question = definer.define_type(question)
         json_context = get_json(class_question)
-
-        # Обновляем контекст, добавляя текущую информацию
-        context += f"\n\nТекущий вопрос: {question}\nКонтекст: {json_context}"
-        
-        # Сохраняем обновленный контекст в хранилище
-        context_store[user_id] = context
         
         # Формирование запроса
         rag_chain = {"context": RunnablePassthrough(), "question": RunnablePassthrough()} | prompt | model
         response = rag_chain.invoke({
             "вопрос пользователя:": question,
             "json файл, по которому ты должен составить ответ пользователю:": json_context,
-            "текущий контекст": context
+            "текущий контекст": user_context
         })
         
         # Возврат текста ответа
@@ -144,10 +129,3 @@ def generate_response(question: str, user_id: str) -> str:
     except Exception as e:
         logging.error(f"Ошибка при обращении к GigaChat: {e}")
         return "Извините, произошла ошибка при обработке вашего запроса."
-
-# # Пример использования
-# if __name__ == "__main__":
-#     user_id = "user123"  # Идентификатор пользователя, например, сессия или IP
-#     question = "Что делать при протекшей крыше?" 
-#     response = generate_response(question, user_id)
-#     print(response)
