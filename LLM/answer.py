@@ -11,7 +11,7 @@ from config import GigaChat_API
 import requests 
 import csv
 import chromadb
-from config import ADDRESSES_FILE
+from config import ADDRESSES_FILE, CLASSIFICATOR_NAME, GIGACHAT_VERSION
 from langchain.vectorstores import Chroma
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.docstore.document import Document
@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 model = GigaChat(
     credentials=GigaChat_API,
     scope="GIGACHAT_API_PERS",
-    model="GigaChat-Max", 
+    model=GIGACHAT_VERSION, 
     temperature=0.7,
     max_tokens=1000,
     verify_ssl_certs=False
@@ -48,7 +48,6 @@ message = """
 prompt = ChatPromptTemplate.from_messages([("human", message)])
 
 def get_building_id(address): 
-    """Получить ID здания по адресу""" 
     url = "https://geo.hack-it.yazzh.ru/api/v2/geo/buildings/search/" 
     response = requests.get(url, params={"query": address}).json() 
     if response.get("success") and response["data"]: 
@@ -56,7 +55,6 @@ def get_building_id(address):
     return None 
  
 def get_building_details(building_id): 
-    """Получить детали здания по ID""" 
     url = f"https://geo.hack-it.yazzh.ru/api/v2/geo/buildings/{building_id}" 
     response = requests.get(url).json() 
     if response.get("data"): 
@@ -64,7 +62,6 @@ def get_building_details(building_id):
     return None 
  
 def get_vehicles_around(latitude, longitude): 
-    """Получить транспорт вокруг здания по координатам""" 
     url = "https://hack-it.yazzh.ru/api/v2/external/dus/get-vehicles-around" 
     response = requests.get(url, params={"latitude": latitude, "longitude": longitude}).json() 
  
@@ -73,10 +70,6 @@ def get_vehicles_around(latitude, longitude):
     return [] 
  
 def get_dispatcher_phones(building_id, dist): 
-    """ 
-    Получить все номера телефонов из категории 'Аварийно-диспетчерские службы' 
-    по building_id. 
-    """ 
     url = f"https://hack-it.yazzh.ru/districts-info/building-id/{building_id}" 
     response = requests.get(url, params={"query": dist}).json()[0] 
  
@@ -157,9 +150,8 @@ def get_json(input_class: str, user_address) -> str:
 class typeDefiner():
     def __init__(self):
         client = chromadb.Client()
-        collection_themes = client.get_or_create_collection(name="collection_themes")
         
-        embeddings = HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large")
+        embeddings = HuggingFaceEmbeddings(model_name=CLASSIFICATOR_NAME)
         self.vector_store_themes = Chroma(embedding_function=embeddings)
         self.vector_store_themes.add_documents([Document('Поиск контактов, основанный на Базе Контактов Санкт-Петербурга'), 
                                         Document('Раздельный сбор мусора'), 
