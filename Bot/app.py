@@ -7,13 +7,14 @@ import csv
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, Router
-from aiogram.types import Message, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import BOT_API, RATINGS_FILE, ADDRESSES_FILE
 from LLM.answer import generate_response
 from collections import Counter
 from string import punctuation
+from aiogram.types import FSInputFile
 
 # Стоп-слова для русского и английского языков
 STOP_WORDS = set("""
@@ -125,6 +126,9 @@ async def send_welcome(message: Message):
         reply_markup=keyboard
     )
 
+# Словарь для хранения состояния процесса редактирования адреса
+user_states = {}
+
 # Обновляем клавиатуру с кнопкой "Редактировать"
 def edit_address_keyboard():
     return InlineKeyboardBuilder().add(InlineKeyboardButton(text="Редактировать", callback_data="edit_address")).as_markup()
@@ -223,11 +227,11 @@ async def update_user_address(user_id: int, new_address: str):
 @router.callback_query(lambda callback: callback.data == "edit_address")
 async def edit_address(callback_query):
     try:
-        # Запрашиваем новый адрес у пользователя
+        user_states[callback_query.from_user.id] = "editing_address"
         await callback_query.message.answer(
             "🖊️ Пожалуйста, введите новый адрес:",
             reply_markup=ReplyKeyboardMarkup(
-                keyboard=[  # Убираем клавиатуру, чтобы пользователь мог ввести свой новый адрес
+                keyboard=[
                     [KeyboardButton(text="Отменить")]
                 ],
                 resize_keyboard=True
@@ -237,7 +241,15 @@ async def edit_address(callback_query):
         logging.error(f"Ошибка при редактировании адреса: {e}")
         await callback_query.message.answer("⚠️ Извините, произошла ошибка при редактировании адреса.")
 
-@router.message(lambda message: message.text != "Отменить")
+@router.message(lambda message: message.text == "Отменить")
+async def cancel_edit(message: Message):
+    user_states.pop(message.from_user.id, None)  # Удаляем состояние пользователя
+    await message.answer(
+        "Вы отменили процесс редактирования адреса.",
+        reply_markup=keyboard  # Возвращаем основную клавиатуру
+    )
+
+@router.message(lambda message: message.from_user.id in user_states and user_states[message.from_user.id] == "editing_address")
 async def handle_new_address(message: Message):
     try:
         user_input = message.text.strip()
@@ -247,6 +259,7 @@ async def handle_new_address(message: Message):
 
         success = await update_user_address(message.from_user.id, user_input)
         if success:
+            user_states.pop(message.from_user.id, None)  # Удаляем состояние после успешного обновления
             await message.answer(f"✅ Ваш новый адрес успешно сохранён: *{user_input}*", parse_mode="Markdown")
         else:
             await message.answer("⚠️ Не удалось обновить ваш адрес. Попробуйте ещё раз.")
@@ -263,24 +276,117 @@ async def cancel_edit(message: Message):
 
 @router.message(Command("rate"))
 async def rate_bot(message: Message):
-    await message.answer(
-        "⭐️ Пожалуйста, оцените мою работу, выбрав количество звёздочек ниже:",
-        reply_markup=rating_keyboard()
-    )
+    try:
+        photo = FSInputFile("us.jpg")
+
+        # Отправка сообщения с фото
+        await message.answer_photo(
+            photo=photo,
+            caption="⭐️ Пожалуйста, оцените мою работу, выбрав количество звёздочек ниже:",
+            reply_markup=rating_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при отправке фотографии: {e}")
+        await message.answer("⚠️ Извините, произошла ошибка при отображении фотографии.")
 
 @router.callback_query(lambda callback: callback.data.startswith("rate:"))
-async def handle_rating(callback_query):
+async def handle_rating(callback_query: CallbackQuery):
     try:
+        user_id = callback_query.from_user.id
+        username = callback_query.from_user.username
         rating = int(callback_query.data.split(":")[1])
-        with open(RATINGS_FILE, mode="a", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
-            writer.writerow([callback_query.from_user.id, callback_query.from_user.username, rating])
 
-        await callback_query.message.edit_text(f"Спасибо за вашу оценку: {rating} ⭐️")
+        # Проверяем, оставлял ли пользователь оценку ранее
+        existing_ratings = []
+        user_rating = None
+        try:
+            with open(RATINGS_FILE, mode="r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    existing_ratings.append(row)
+                    if str(user_id) == row[0]:  # Проверяем user_id
+                        user_rating = int(row[2])  # Сохраняем существующую оценку
+        except FileNotFoundError:
+            pass  # Файл ещё не существует, это нормально
+
+        if user_rating is not None:
+            # Пользователь уже оставлял оценку
+            await bot.send_message(
+                chat_id=callback_query.from_user.id,
+                text=(
+                    f"Вы уже поставили оценку: {user_rating} ⭐️.\n"
+                    "Хотите изменить её?"
+                ),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text="Да, изменить", callback_data=f"change_rate:{rating}")],
+                        [InlineKeyboardButton(text="Нет, оставить как есть", callback_data="cancel_change")]
+                    ]
+                )
+            )
+        else:
+            # Добавляем новую оценку
+            with open(RATINGS_FILE, mode="a", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow([user_id, username, rating])
+
+            await bot.send_message(
+                chat_id=callback_query.from_user.id,
+                text=f"Спасибо за вашу оценку: {rating} ⭐️"
+            )
+
     except Exception as e:
         logging.error(f"Ошибка при обработке оценки: {e}")
-        await callback_query.message.edit_text("⚠️ Ошибка при сохранении вашей оценки.")
+        await bot.send_message(
+            chat_id=callback_query.from_user.id,
+            text="⚠️ Ошибка при сохранении вашей оценки."
+        )
 
+@router.callback_query(lambda callback: callback.data.startswith("change_rate:"))
+async def change_rate(callback_query: CallbackQuery):
+    try:
+        new_rating = int(callback_query.data.split(":")[1])
+        user_id = callback_query.from_user.id
+
+        # Обновляем оценку пользователя в файле
+        updated_ratings = []
+        with open(RATINGS_FILE, mode="r", encoding="utf-8") as file:
+            reader = csv.reader(file)
+            for row in reader:
+                if str(row[0]) == str(user_id):
+                    row[2] = str(new_rating)  # Обновляем оценку пользователя
+                updated_ratings.append(row)
+
+        # Перезаписываем файл с новыми данными
+        with open(RATINGS_FILE, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            writer.writerows(updated_ratings)
+
+        await bot.send_message(
+            chat_id=callback_query.from_user.id,
+            text=f"Спасибо за изменение вашей оценки: {new_rating} ⭐️"
+        )
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке изменения оценки: {e}")
+        await bot.send_message(
+            chat_id=callback_query.from_user.id,
+            text="⚠️ Ошибка при изменении вашей оценки."
+        )
+
+@router.callback_query(lambda callback: callback.data == "cancel_change")
+async def cancel_change(callback_query: CallbackQuery):
+    try:
+        await bot.send_message(
+            chat_id=callback_query.from_user.id,
+            text="Оценка оставлена без изменений."
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при отмене изменения оценки: {e}")
+        await bot.send_message(
+            chat_id=callback_query.from_user.id,
+            text="⚠️ Ошибка при отмене изменения оценки."
+        )
 # Обработчик команды /question
 @router.message(Command("question"))
 async def ask_question(message: Message):
@@ -326,7 +432,7 @@ async def cancel_question(message: Message):
         reply_markup=keyboard  # Возвращаем основную клавиатуру
     )
 
-@router.message()
+@router.message(lambda message: message.from_user.id not in user_states or user_states[message.from_user.id] != "editing_address")
 async def handle_message(message: Message):
     user_input = message.text
     await bot.send_chat_action(chat_id=message.chat.id, action="typing")
